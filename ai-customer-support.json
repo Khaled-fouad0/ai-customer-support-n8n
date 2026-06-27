@@ -1,0 +1,856 @@
+{
+  "name": "ai-customer-support",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "customer-support",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "795105a7-0564-43e7-adfc-76768457631f",
+      "name": "Webhook",
+      "webhookId": "90b4159b-0c9c-4f11-b10a-d74939a9abe1"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.groq.com/openai/v1/chat/completions",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "groqApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"llama-3.3-70b-versatile\",\n  \"temperature\": 0.3,\n  \"max_tokens\": 500,\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"You are an expert customer support AI for an e-commerce company.\\n\\nYour job:\\n- Analyze the customer message carefully\\n- Classify it accurately\\n- Respond warmly and professionally\\n- Detect urgency and emotion\\n- Use customer history to personalize your response\\n\\nRules:\\n- needs_human = true if: payment dispute, account hacked, legal threat, extremely angry, complex technical issue, custom API integration\\n- priority = high if: payment issue, no access to account, words like urgent/immediately/lawsuit, or customer has 3+ previous unresolved issues\\n- priority = low if: general question, curiosity, compliment\\n- Always reply in the SAME language the customer used\\n- Keep response under 3 sentences, warm and helpful\\n- Never make up order numbers or promises\\n- If customer is a repeat complainer on same issue, acknowledge it and escalate\\n\\nRespond ONLY with this exact JSON, no extra text:\\n{\\n  \\\"category\\\": \\\"billing|shipping|technical|general\\\",\\n  \\\"priority\\\": \\\"high|medium|low\\\",\\n  \\\"sentiment\\\": \\\"angry|frustrated|neutral|satisfied\\\",\\n  \\\"needs_human\\\": true,\\n  \\\"response\\\": \\\"your reply here\\\",\\n  \\\"internal_note\\\": \\\"one line for the support team\\\"\\n}\\n\\nCUSTOMER HISTORY:\\n{{ $('Code in JavaScript1').first().json.customer_history }}\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"Customer: {{ $('Code in JavaScript1').first().json.name }}, Email: {{ $('Code in JavaScript1').first().json.email }}, Message: {{ $('Code in JavaScript1').first().json.message }}\"\n    }\n  ]\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        624,
+        16
+      ],
+      "id": "766b9d3e-a2c7-4c15-a23d-f836de3ffc06",
+      "name": "HTTP Request",
+      "retryOnFail": true,
+      "waitBetweenTries": 2000,
+      "credentials": {
+        "groqApi": {
+          "id": "HPqV8Vvjvg1NGKa5",
+          "name": "Groq account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $input.first().json.choices[0].message.content;\nconst parsed = JSON.parse(raw);\n\nreturn [{\n  json: {\n    ...parsed,\n    customer_name: $('Webhook').first().json.body.name,\n    customer_email: $('Webhook').first().json.body.email,\n    original_message: $('Webhook').first().json.body.message,\n    timestamp: new Date().toISOString()\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        832,
+        16
+      ],
+      "id": "a46bc967-bb7e-4216-a43a-3836a092434d",
+      "name": "Code in JavaScript",
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.priority }}",
+                    "rightValue": "high",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "53c90c48-3ae1-46da-b0c2-cf952203d5e6"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Urgent"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "c3f68627-8b84-4eff-849c-3772e95244ff",
+                    "leftValue": "={{ $json.needs_human }}",
+                    "rightValue": "",
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "true",
+                      "singleValue": true
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Human_Review"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra"
+        }
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        1040,
+        16
+      ],
+      "id": "1d3ab45b-8500-4b90-86f5-57e22e3f0685",
+      "name": "Switch"
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1M7RUa_jDcfGxGjxGNAYcMAVOsv9Q5_AjR94S0e4E6Qg",
+          "mode": "list",
+          "cachedResultName": "AI Customer Support Log",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1M7RUa_jDcfGxGjxGNAYcMAVOsv9Q5_AjR94S0e4E6Qg/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "الورقة1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1M7RUa_jDcfGxGjxGNAYcMAVOsv9Q5_AjR94S0e4E6Qg/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Timestamp": "={{ $json.timestamp }}",
+            "Name": "={{ $json.customer_name }}",
+            "Email": "={{ $json.customer_email }}",
+            "Message": "={{ $json.original_message }}",
+            "Category": "={{ $json.category }}",
+            "Priority": "={{ $json.priority }}",
+            "Sentiment": "={{ $json.sentiment }}",
+            "Needs Human": "={{ $json.needs_human }}",
+            "AI Response": "={{ $json.response }}",
+            "Internal Note": "={{ $json.internal_note }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "Timestamp",
+              "displayName": "Timestamp",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Name",
+              "displayName": "Name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Email",
+              "displayName": "Email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Message",
+              "displayName": "Message",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Category",
+              "displayName": "Category",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Priority",
+              "displayName": "Priority",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Sentiment",
+              "displayName": "Sentiment",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Needs Human",
+              "displayName": "Needs Human",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "AI Response",
+              "displayName": "AI Response",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Internal Note",
+              "displayName": "Internal Note",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1248,
+        -96
+      ],
+      "id": "762e94f0-2226-412d-add3-96d63353c6d3",
+      "name": "Append row in sheet",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "qSMMp6oABSUrKXLf",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1M7RUa_jDcfGxGjxGNAYcMAVOsv9Q5_AjR94S0e4E6Qg",
+          "mode": "list",
+          "cachedResultName": "AI Customer Support Log",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1M7RUa_jDcfGxGjxGNAYcMAVOsv9Q5_AjR94S0e4E6Qg/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "الورقة1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1M7RUa_jDcfGxGjxGNAYcMAVOsv9Q5_AjR94S0e4E6Qg/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Timestamp": "={{ $json.timestamp }}",
+            "Name": "={{ $json.customer_name }}",
+            "Email": "={{ $json.customer_email }}",
+            "Message": "={{ $json.original_message }}",
+            "Category": "={{ $json.category }}",
+            "Priority": "={{ $json.priority }}",
+            "Sentiment": "={{ $json.sentiment }}",
+            "Needs Human": "={{ $json.needs_human }}",
+            "AI Response": "={{ $json.response }}",
+            "Internal Note": "={{ $json.internal_note }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "Timestamp",
+              "displayName": "Timestamp",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Name",
+              "displayName": "Name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Email",
+              "displayName": "Email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Message",
+              "displayName": "Message",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Category",
+              "displayName": "Category",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Priority",
+              "displayName": "Priority",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Sentiment",
+              "displayName": "Sentiment",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Needs Human",
+              "displayName": "Needs Human",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "AI Response",
+              "displayName": "AI Response",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Internal Note",
+              "displayName": "Internal Note",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1312,
+        32
+      ],
+      "id": "40b160ac-1c8f-4660-9e0e-eba2c5a7e3a8",
+      "name": "Append row in sheet1",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "qSMMp6oABSUrKXLf",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1M7RUa_jDcfGxGjxGNAYcMAVOsv9Q5_AjR94S0e4E6Qg",
+          "mode": "list",
+          "cachedResultName": "AI Customer Support Log",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1M7RUa_jDcfGxGjxGNAYcMAVOsv9Q5_AjR94S0e4E6Qg/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "الورقة1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1M7RUa_jDcfGxGjxGNAYcMAVOsv9Q5_AjR94S0e4E6Qg/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Timestamp": "={{ $json.timestamp }}",
+            "Name": "={{ $json.customer_name }}",
+            "Email": "={{ $json.customer_email }}",
+            "Message": "={{ $json.original_message }}",
+            "Category": "={{ $json.category }}",
+            "Priority": "={{ $json.priority }}",
+            "Sentiment": "={{ $json.sentiment }}",
+            "Needs Human": "={{ $json.needs_human }}",
+            "AI Response": "={{ $json.response }}",
+            "Internal Note": "={{ $json.internal_note }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "Timestamp",
+              "displayName": "Timestamp",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Name",
+              "displayName": "Name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Email",
+              "displayName": "Email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Message",
+              "displayName": "Message",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Category",
+              "displayName": "Category",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Priority",
+              "displayName": "Priority",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Sentiment",
+              "displayName": "Sentiment",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Needs Human",
+              "displayName": "Needs Human",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "AI Response",
+              "displayName": "AI Response",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Internal Note",
+              "displayName": "Internal Note",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1296,
+        176
+      ],
+      "id": "adf7d5c2-13ee-4f13-bcf7-493c50a4ffe7",
+      "name": "Append row in sheet2",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "qSMMp6oABSUrKXLf",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "fromEmail": "kfouadabufares@gmail.com",
+        "toEmail": "={{ $('Code in JavaScript').first().json.customer_email }}",
+        "subject": "=Re: Your Support Request - {{ $('Code in JavaScript').first().json.category }}",
+        "html": "=<p>Hi {{ $('Code in JavaScript').first().json.customer_name }},</p>\n<p>{{ $('Code in JavaScript').first().json.response }}</p>\n<p>Ticket priority: <strong>{{ $('Code in JavaScript').first().json.priority }}</strong></p>\n<br>\n<p>Best regards,<br>Support Team</p>",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        1472,
+        32
+      ],
+      "id": "7827340f-5d57-4d41-9561-07078b5af8e7",
+      "name": "Send an Email1",
+      "webhookId": "74f28e05-6be8-4d56-a161-54a9f9626471",
+      "credentials": {
+        "smtp": {
+          "id": "AB1Pb0w7Dn2stQ7q",
+          "name": "SMTP account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "fromEmail": "kfouadabufares@gmail.com",
+        "toEmail": "kfouadabufares@gmail.com",
+        "subject": "=Error in Customer Support Workflow",
+        "html": "=<p>An error occurred in the AI Customer Support workflow.</p> <p><strong>Error:</strong> {{ $json.error.message }}</p> <p><strong>Time:</strong> {{ $now }}</p> <p>Please check n8n for details.</p>",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        1024,
+        176
+      ],
+      "id": "0b4a0dca-f9c0-4b47-a97f-6776934a0b1e",
+      "name": "Send an Email3",
+      "webhookId": "1935fc82-6962-4664-95fb-ccdff6515510",
+      "credentials": {
+        "smtp": {
+          "id": "AB1Pb0w7Dn2stQ7q",
+          "name": "SMTP account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "fromEmail": "kfouadabufares@gmail.com",
+        "toEmail": "={{ $('Code in JavaScript').first().json.customer_email }}",
+        "subject": "=Re: Your Support Request - {{ $('Code in JavaScript').first().json.category }}",
+        "html": "=<p>Hi {{ $('Code in JavaScript').first().json.customer_name }},</p>\n<p>{{ $('Code in JavaScript').first().json.response }}</p>\n<p>Ticket priority: <strong>{{ $('Code in JavaScript').first().json.priority }}</strong></p>\n<br>\n<p>Best regards,<br>Support Team</p>",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        1456,
+        -112
+      ],
+      "id": "3f6c4d2e-ed02-4902-8c8e-8ba21eb456e4",
+      "name": "Send an Email",
+      "webhookId": "74f28e05-6be8-4d56-a161-54a9f9626471",
+      "credentials": {
+        "smtp": {
+          "id": "AB1Pb0w7Dn2stQ7q",
+          "name": "SMTP account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "fromEmail": "kfouadabufares@gmail.com",
+        "toEmail": "={{ $json.customer_email }}",
+        "subject": "=Re: Your Support Request - {{ $json.category }}",
+        "html": "=<p>Hi {{ $json.customer_name }},</p>\n<p>{{ $json.response }}</p>\n<p>Ticket priority: <strong>{{ $json.priority }}</strong></p>\n<br>\n<p>Best regards,<br>Support Team</p>",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        1504,
+        176
+      ],
+      "id": "0b135626-37b0-4615-883e-5bf43313aa4b",
+      "name": "Send an Email4",
+      "webhookId": "74f28e05-6be8-4d56-a161-54a9f9626471",
+      "credentials": {
+        "smtp": {
+          "id": "AB1Pb0w7Dn2stQ7q",
+          "name": "SMTP account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "1M7RUa_jDcfGxGjxGNAYcMAVOsv9Q5_AjR94S0e4E6Qg",
+          "mode": "list",
+          "cachedResultName": "AI Customer Support Log",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1M7RUa_jDcfGxGjxGNAYcMAVOsv9Q5_AjR94S0e4E6Qg/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "الورقة1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1M7RUa_jDcfGxGjxGNAYcMAVOsv9Q5_AjR94S0e4E6Qg/edit#gid=0"
+        },
+        "filtersUI": {
+          "values": [
+            {
+              "lookupColumn": "Email",
+              "lookupValue": "={{ $json.body.email }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        208,
+        0
+      ],
+      "id": "88e16f29-a2b2-4075-b1a5-2c4bb1849764",
+      "name": "Get row(s) in sheet",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "qSMMp6oABSUrKXLf",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const rows = $input.all().map(item => item.json);\nconst categoryCounts = {};\nrows.forEach(row => {\n  const cat = row.Category || 'general';\n  categoryCounts[cat] = (categoryCounts[cat] || 0) + 1;\n});\nconst topCategory = Object.entries(categoryCounts)\n  .sort((a, b) => b[1] - a[1])[0];\nconst last3 = rows.slice(-3).map(row => \n  `[${row.Timestamp?.slice(0,10)}] ${row.Category} (${row.Priority}): \"${row.Message}\"`\n).join(' | ').replace(/\"/g, \"'\");\n\nconst customerHistory = rows.length === 0 \n  ? 'New customer, no history.'\n  : `Customer has ${rows.length} previous tickets. Most common issue: ${topCategory[0]} (${topCategory[1]} times). Last 3 messages: ${last3}`;\n\nreturn [{\n  json: {\n    customer_history: customerHistory,\n    total_tickets: rows.length,\n    top_category: topCategory ? topCategory[0] : 'none',\n    name: $('Webhook').first().json.body.name,\n    email: $('Webhook').first().json.body.email,\n    message: $('Webhook').first().json.body.message\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        416,
+        0
+      ],
+      "id": "ef0fff6f-2e59-486c-bda5-ca4d67982afa",
+      "name": "Code in JavaScript1"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Get row(s) in sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "Switch",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send an Email3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch": {
+      "main": [
+        [
+          {
+            "node": "Append row in sheet",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Append row in sheet1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Append row in sheet2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Append row in sheet": {
+      "main": [
+        [
+          {
+            "node": "Send an Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Append row in sheet1": {
+      "main": [
+        [
+          {
+            "node": "Send an Email1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Append row in sheet2": {
+      "main": [
+        [
+          {
+            "node": "Send an Email4",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get row(s) in sheet": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript1": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "19ba0d7f-71b6-4285-941e-5ecaac2be117",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "126afa01b62ab25cdc467e77c148066a2958e76500cc2ab27945094c71172101"
+  },
+  "id": "oKbCbHzmTwdXzp05",
+  "tags": []
+}
